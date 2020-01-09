@@ -1,0 +1,347 @@
+---
+title: "Is There an Association Between Income Disparity and the Number of Bank Consumer Complaints?"
+author: "Sriya Cheedella, Daisha Flowers, Hailin Yao"
+date: "12/8/2019"
+output: 
+  beamer_presentation:
+    theme: "JuanLesPins"
+    colortheme: "dolphin"
+    fonttheme: "structurebold"
+  df_print: paged
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r libs, include=FALSE}
+library(dplyr)
+library(ggplot2)
+library(pscl)
+library(nnet)
+```
+
+## Context
+
+- When it comes to money, everyone has a love-hate relationship. People love it when they get their
+first paycheck, but once they begin to run out, they hate the concept of relying on a piece of paper
+to acquire their needs. Instead of looking within themselves, they turn to outside factors, such as
+their banks, to blame their problems on. However, banks are far from perfect. They
+make mistakes that need to be pointed out because they have a plethora of customers to handle.
+Due to this logic, banks receive numerous consumer complaints about various financial issues in
+hopes that the corresponding bank can solve them.
+
+## Problem
+
+- We want to investigate if there is there is a certain cause behind customer complaints besides the
+issue stated with their bank. Out of all the probable causes, we wanted to examine if there is
+correlation between income disparity and the number of bank complaints. Since feelings are deeply
+intertwined with complaining, we wanted to utilize an objective variable that could aid us in
+discovering a variable that deeply influences the actions of bank customers.
+
+## Data Description
+
+- Consumer Complaints Database
+    - Collection of complaints about consumer financial products and services that CFBP sent to companies for response.
+    - 1.7 million observations from 2012 to 2016.
+    - Provided by Consumer Financial Protection Bureau (cfbp).
+    - Each row is a complaint providing information about...
+    - Columns: date, product, subproduct, issue, subissue, narrative, response, company, state, zipcode, tag, consent, submitted, datesent, privresponse, timely, disputed, complaintid and standard.
+    
+## Data Description Cont.
+    
+- Average State Incomes
+   - Provides state and its corresponding median income.
+   - Collected by American Community Survey (ACS) in 2017, accounting for inflation.
+   - Columns: GEO.id, GEO.id2, GEO.display-label, GRT_STUB.target-geo-id, GRT_STUB.target-geo-id2, GRT_STUB.rank-label, GRT_STUB.display-label, EST, and MOE.
+
+- State Abbreviations
+    - Provides state names and its corresponding abbreviation.
+    - Collected by World Population Review.
+
+## Data Cleaning
+
+- We used MySQL to remove the unneccessary columns because R wasn't able to load all the data.
+- Data was very clean considering it was government data.
+- Deleted rows that had zip code in wrong column (only a few rows).
+- Zip code clean up:
+    - Roughly half of the zip codes only had 2-3 digits (e.g. 203XX, 56XXX),  so removed those rows.
+- Deleted rows where the disputed column had "N/A".
+- Began with 1.7 mil rows, left with 429126 rows at the end!
+
+## Data Cleaning with MySQL
+
+- Commands used:
+    - desc ccdata; -> Described the table ccdata, providing column name and its type.
+    - select * from ccdata limit 100; -> Displayed the first 100 rows of the table ccdata.
+    - alter table ccdata modify date varchar(255) not null; -> Changed the type of column "date" from table ccdata to character type and not null.
+    - select distinct(product) from ccdata; -> Showed the distinct entries in the column "product" from table ccdata.
+    - select count(*) from ccdata; -> Counted the total number of rows in table ccdata.
+    - alter table ccdata drop narrative; -> Deleted the column "narrative" from table ccdata.
+    - select * from ccdata where char_length(zipcode) = 5; -> Kept the rows with 5-digit zip codes.
+    - select * from ccdata where disputed != "N/A"; -> Removed rows with N/A as the entry.
+    
+## Data Cleaning with R
+\fontsize{8pt}{5}\selectfont
+
+- With majority of the data cleaned in MySQL, we just read in the data and combine the useful information into a single dataframe:
+
+```{r data, echo=TRUE}
+#load complaints data
+ccdata <- read.csv("/home/uscheed/Documents/temp/ccdata.csv", sep = ';', 
+                   header = FALSE)
+colnames(ccdata) <- c("date", "product", "issue", "company", "state", 
+                      "zipcode", "response", "timely", "disputed", 
+                      "complaintid")
+
+#load avg state incomes
+avginc <- read.csv("/home/uscheed/Documents/temp/docs/avgStateIncomes.csv")
+avginc <- avginc[c(7,8)]
+index <- order(avginc$GRT_STUB.display.label)
+avginc <- avginc[index, ]
+avginc <- avginc[which(avginc$GRT_STUB.display.label != "Puerto Rico" & 
+                         avginc$GRT_STUB.display.label != "United States"),]
+
+#load states and abbreviations
+stateabb <- read.csv("/home/uscheed/Documents/temp/docs/state_abbrev.csv")
+stateabb <- stateabb[c(1,3)]
+
+#merge states and income to get abbreviations with avg income
+finalavginc <- merge(stateabb, avginc, by.x = "State", by.y = "GRT_STUB.display.label")
+
+#final data frame
+finaldf <- merge(ccdata, finalavginc, by.x = "state", by.y = "Code")
+```
+
+## Final Dataframe
+\fontsize{7pt}{5}\selectfont
+
+```{r datafinal, echo=TRUE}
+head(finaldf)
+```
+
+## Exploratory Data Analysis
+\fontsize{4pt}{5}\selectfont
+
+```{r eda1, echo=TRUE}
+prod <- ggplot(finaldf, aes(product, fill = disputed))
+prod + geom_bar(aes(x = product), width = 0.5) + theme(axis.text.x = element_text(angle=65, vjust=0.6)) + labs(title="Type of Products in Complaints (Disputed?)")
+```
+
+- We see that the most complained financial product is mortgage, which isn't surprising. We can also see that in all products, the majority of complaints aren't disputed. This makes sense since most people don't have the time or patience to follow through with their complaints.
+
+## Exploratory Data Analysis Continued
+\fontsize{4pt}{5}\selectfont
+
+```{r eda2, echo=TRUE}
+time <- ggplot(finaldf, aes(product, fill = timely))
+time + geom_bar(aes(x = product), width = 0.5) + theme(axis.text.x = element_text(angle=65, vjust=0.6)) + labs(title="Type of Products in Complaints (Timely?)")
+```
+- We see here again that the most complained financial product is mortgage. But in this histogram, we see that most of complaints are timely which is good to know.
+
+## Exploratory Data Analysis Continued
+\fontsize{7pt}{5}\selectfont
+```{r eda3, echo=TRUE}
+bankcount <- count(finaldf, company)
+bankind <- order(bankcount$n, decreasing = TRUE)
+bankcount <- bankcount[bankind,]
+bankcttop <- bankcount[1:10,]
+bankcttop
+```
+
+## Exploratory Data Analysis Continued
+\fontsize{5pt}{5}\selectfont
+```{r eda 3 cont, echo=TRUE}
+ggplot(bankcttop, aes(x = "", y=n, fill=company))+geom_bar(width = 1, stat="identity")+coord_polar("y", start = 0) +
+  labs(title="Top 10 Banks with Highest # of Complaints")
+```
+
+- There are over 1000 different banks, so we chose to display the top 10 banks with the highest number of complaints. In this pie chart and the dataframe, we see that two popular banks, Bank of America and Wells Fargo have the most complaints. This makes sense since banks with more customers will naturally receive more complaints.
+
+## Exploratory Data Analysis Continued
+\fontsize{4pt}{5}\selectfont
+```{r eda4, echo=FALSE}
+finaldf$EST_z_score <- round((finaldf$EST - mean(finaldf$EST))/sd(finaldf$EST), digits=2)
+finaldf$EST_type <- ifelse(finaldf$EST_z_score <= 0, "below", "above")
+finaldf <- finaldf[order(finaldf$EST_z_score), ] #Ascending sort on Z Score
+finaldf$State <- factor(finaldf$State, levels = levels(finaldf$State))
+```
+
+```{r eda4 cont, echo=FALSE}
+ggplot(finaldf, aes(x=State, y=EST_z_score, label=EST_z_score)) + geom_point(stat='identity', aes(col=EST_type), size=6)  +
+  scale_color_manual(name="State Median Income", labels = c("Above Average", "Below Average"), values = c("above"="#00ba38", "below"="#f8766d")) + geom_text(color="white", size=2) +labs(title="Diverging Dot Plot", subtitle="Normalized income of all states") + ylim(-2.5, 2.5) +coord_flip()
+```
+
+## What is Simple Linear Regression?
+
+- This method is used when we want to see if one independent variable is correlated with the dependent variable.
+- Both variables are quantitative.
+- Examples:
+    - Are height and weight correlated?
+    - Is money spend on advertising associated with the company's profit?
+
+## SLR Assumptions
+\fontsize{7pt}{5}\selectfont
+- The data is normally distributed.
+- We have over 30 observations in our dataset, so by the Central Limit Theorem our data is normally distributed.
+- There is a linear relationship between the independent and dependent variables.
+
+```{r splot, echo=TRUE, fig.height=2, fig.width=2}
+compcts <- count(finaldf, vars=State)
+compcts$vars <- tolower(compcts$vars)
+ctsinc <- merge(compcts, finalavginc, by.x = "vars", by.y = "State")
+ctsinc <- ctsinc[, c(1,2,4)]
+
+#ggplot(data = ctsinc, aes(x=n, y=EST)) + geom_point() + labs(title = "Income vs. # of Complaints")
+# cor(ctsinc$EST, ctsinc$n)
+```
+0.09541067
+
+```{r splot2, echo=TRUE}
+# cor(ctsinc$EST, ctsinc$n_log)
+```
+-0.156537
+
+- There is barely a linear relationship even after the log transformation, but we will continue anyways.
+- The variability of the residuals will be relatively constant across all values of X.
+
+## SLR Assumptions Continued
+\fontsize{6pt}{5}\selectfont
+```{r resid, echo=FALSE}
+# ctsinc$n_log <- log(ctsinc$n)
+# cclm <- lm(n_log ~ EST, data = ctsinc)
+# ggplot(cclm, aes(x = .fitted, y = .resid)) + geom_point() + labs(title = "Fitted vs. Residuals")
+```
+![img geom](/home/uscheed/Documents/temp/docs/FittedResCcdata.png)
+
+## SLR Assumptions Continued
+- There seems to constant variance (homoscedasticity) so we can continue.
+- The y-values are independent of each other.
+- We can assume that the number of complaints from each state are independent of each other since the data collection doesn't rely on state when the complaints are being recorded. The randomness of the residual plot verifies this reasoning.
+
+
+## Simple Linear Regression
+\fontsize{6pt}{5}\selectfont
+```{r lm, echo=TRUE}
+# cclm <- lm(n_log ~ EST, data = ctsinc)
+# summary(cclm)
+```
+Call:
+lm(formula = n_log ~ EST, data = ctsinc)
+
+Residuals:
+    Min      1Q  Median      3Q     Max 
+-5.5927 -0.8041  0.3673  1.5667  4.0197 
+
+Coefficients:
+              Estimate Std. Error t value Pr(>|t|)    
+(Intercept)  9.684e+00  1.862e+00   5.201 3.87e-06 ***
+EST         -3.382e-05  3.048e-05  -1.109    0.273    
+---
+Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+Residual standard error: 2.21 on 49 degrees of freedom
+Multiple R-squared:  0.0245,	Adjusted R-squared:  0.004597 
+F-statistic: 1.231 on 1 and 49 DF,  p-value: 0.2726
+
+- The equation produced is:
+
+- $(Num Complaints) = -0.00003382(Income) + 9.684$
+
+- With an $R^2$ of 0.0245, we can see that the model fits the data horribly. Plus, we can see that the state's median income is not a significant predictor of the number of complaints because its p-value is greater than 0.05.
+
+- There is sufficient evidence to conclude that there is no association between a state's number of complaints and its median income.
+
+## What is Multinomial Logistic Regression?
+
+- This supervised machine learning algorithm is used when we want to find an association between predictor(s) (x) and three or more categorical explanatory (y) variables.
+- The response variables are unordered, meaning that one variable is not more important than the others (there is no natural order).
+- Examples:
+    - Is there an association between student's grades in high school and which major they choose in college?
+        - X: Percentage grades in history, math, science, english.
+        - Y: History, Math, Science, English.
+    - Is someone's mood related to their daily activities?
+        - X: Time spent in social activities, time spent in exercise, time spent in studying, etc.
+        - Y: Happiness, sadness, anger, fear, disgust, surprise. 
+
+## MLR Assumptions
+
+- For multinomial logistic regression, we do not have to check for normality, linearity or homoscedasticity.
+- We do have to check for multicollinearity, but we only have one predictor.
+    - Multicollinearity is when the independent variables in a model are linearly correlated with each other.
+    - For example, race length and race time & age and diseases.
+
+## Multinomial Logistic Regression
+\fontsize{5pt}{5}\selectfont
+```{r mlrex, echo=FALSE}
+ind = sort(sample(nrow(finaldf), nrow(finaldf)*.7))
+train <- finaldf[ind,]
+test <- finaldf[-ind,]
+```
+
+```{r mlr, echo=TRUE}
+finaldf$product2 <- relevel(finaldf$product, ref = "Mortgage")
+ccmod <- multinom(product ~ EST, data=train)
+summary(ccmod)
+```
+
+## Our Model's Accuracy
+\fontsize{5pt}{5}\selectfont
+```{r acc, echo=TRUE}
+pR2(ccmod)
+
+wald <- summary(ccmod)$coefficients/summary(ccmod)$standard.errors
+p_ccmod <- (1 - pnorm(abs(wald), 0, 1)) * 2
+p_ccmod
+```
+
+- With a McFadden's $R^2$ of 0.00105, we see that the model fits the data horribly. However, we notice that all the product types are less than 0.05 except prepaid card, which means that the average state income is a significant predictor for those products.
+
+- There is sufficient evidence that there is no association between the type of bank consumer complaints and the state income given the $R^2$ and accuracy of the model.
+
+## Drawbacks
+\fontsize{9pt}{5}\selectfont
+
+- We use the median state income, which encompasses the income disparities among all counties. Counties in certain areas of a state have a higher median income than others. Prime example is Virginia; northern Virginia counties have much higher household incomes compared to southern Virginia. Consequently, the median state income may differ greatly from their actual income and utilizing the county's income is a more accurate representation.
+- While cleaning the data, we removed the zip codes that aren't five digits long. However, when R read the data, it removes the leading zeros, making it an invalid zip code (00568 -> 568). This may have removed vital data and made the distribution more skewed and less normally distributed.
+- We are not accounting for the population of each state. This might be an issue because if there are more people in a state, this leads to a higher number of complaints.
+- Complaints depend on the personalities of the people too, and that could be dependent on the state's culture and the upbringing of the person itself. A person can have a low income but be satisified with their financial state, while an upper middle class person can be stingy.
+
+## Number of Complaints Per State (Top 10)
+\fontsize{5pt}{5}\selectfont
+
+```{r mapp, echo=TRUE}
+#long and lat of states
+states <- map_data("state")
+states <- states[c(1,2,3,5)]
+finalavginc$State <- tolower(finalavginc$State)
+mapinc <- merge(finalavginc, states, by.x = "State", by.y = "region")
+
+ziplonglat <- read.csv("~/Documents/temp/docs/zipcodelonglat.txt")
+mapzip <- merge(finaldf, ziplonglat, by.x = "zipcode", by.y = "ZIP")
+mapzip <- mapzip[which(mapzip$state != "ak" & mapzip$state != "hi" & mapzip$LNG > -130),]
+```
+
+```{r counts, echo=TRUE}
+compcounts <- count(mapzip, vars=State)
+ccindex <- order(compcounts$n, decreasing = TRUE)
+compcounts <- compcounts[ccindex,]
+compcounts
+```
+
+## Final Visualization - US Map
+```{r map, echo=FALSE}
+comps <- ggplot(data = mapzip) + 
+  geom_point(aes(x = LNG, y = LAT), color = "white") + 
+  coord_fixed(1.3)
+ggplot(data = mapinc) + 
+  geom_polygon(aes(x = long, y = lat, fill = EST, group = group), color = "black") + 
+  coord_fixed(1.3) + 
+  geom_point(aes(x = LNG, y = LAT), color = "white", data = mapzip, size = 0.5, shape = 3) +
+  labs(title = "Number of Consumer Complaints vs. Income Disparity")
+
+```
+We see that the lighter blue states have a higher median income while the darker blue states have a lower median income. We can also notice that the complaints are densely populated in California, Florida and Texas which can be verified by the chart shown.
+
