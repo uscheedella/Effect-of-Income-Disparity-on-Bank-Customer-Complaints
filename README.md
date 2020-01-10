@@ -26,5 +26,5 @@ two datasets by matching the state of the complaint and its corresponding income
 To visualize the relationship, we will use “ggmap” to color code the nation by the income levels and
 overlay the number of complaints in each zip code or state, depending on which method is better.
 However, correlation does not mean causation – we conducted statistical techniques such as simple 
-linear regression and multinomial logistic regression depict if there’s a relationship between the 
+linear regression and multinomial logistic regression to depict if there’s a relationship between the 
 two variables.
