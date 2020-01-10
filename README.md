@@ -19,13 +19,12 @@ discovering a variable that deeply influences the actions of bank customers.
 ## Analysis:
 We wish to combine two datasets to investigate into this problem. One dataset purely states the
 customer complaints in 2012-2019 from Consumer Financial Protection Bureau and contains
-metadata regarding the location, date and product name. In the other dataset, U.S. Environmental
-Protection Agency describes the total household income levels nationwide by county. By converting
-county names into zip codes (the library “sp” in R contains this functionality), we merge those two
-datasets over zip code and date to account for inflation.
+metadata regarding the location, date and product name. In the other dataset, the American Community
+Survey organization describes the total household income levels nationwide by state. We merge these
+two datasets by matching the state of the complaint and its corresponding income.
+
 To visualize the relationship, we will use “ggmap” to color code the nation by the income levels and
 overlay the number of complaints in each zip code or state, depending on which method is better.
-However, correlation does not mean causation – conducting statistical tests such as t-tests and
-regression methods will depict if there’s a relationship between the two variables. Furthermore,
-machine learning techniques such as PCA and SVM will allow us to classify the complaints and
-predict if a certain area will file more complaints in the future. 
+However, correlation does not mean causation – we conducted statistical techniques such as simple 
+linear regression and multinomial logistic regression depict if there’s a relationship between the 
+two variables.
